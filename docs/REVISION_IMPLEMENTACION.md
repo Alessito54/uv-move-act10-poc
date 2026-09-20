@@ -1,7 +1,7 @@
 # Documento de Revisión: Implementación Actividad 10
 
 ## 1. ESTADO GENERAL
-- **Implementado**: Backend modular, frontend en React, scripts de base de datos IBM Db2 (incluyendo `004_add_check_constraints.sql`), autenticación de Supabase sin fallbacks ni secretos ficticios, DTO tipado `VehiculoDTO` en el puerto de comunicación entre módulos.
+- **Implementado**: Backend modular, frontend en React, scripts de base de datos IBM Db2 (incluyendo evolución con `004_add_check_constraints.sql` y `005_seed_reservation_test.sql`), autenticación de Supabase sin fallbacks ni secretos ficticios, DTO tipado `VehiculoDTO` en el puerto de comunicación entre módulos.
 - **Compilado**: Sí (`npm run build` ejecutado exitosamente sin errores tanto en backend como en frontend).
 - **Probado**: Parcialmente (arquitectura, tipos, interfaces, scripts SQL y compilación validados).
 - **PENDIENTE (MUY IMPORTANTE)**: Las pruebas de extremo a extremo con IBM Db2 real **SIGUEN PENDIENTES** hasta que se ejecuten contra un servidor/contenedor IBM Db2 activo con credenciales reales configuradas. **NO están marcadas como realizadas.**
@@ -38,6 +38,7 @@
 - Transacciones soportadas vía callback custom `executeTransactionWithLogic` con nivel de aislamiento RR (`SET CURRENT ISOLATION TO RR`).
 - Se eliminó completamente cualquier cadena de conexión fallback ("testdb/password"). Si `DB2_CONNECTION_STRING` no está definida, lanza un error claro.
 - Añadidos CHECK constraints (`TARIFA_HORA >= 0`, `TIEMPO_MAX_MIN > 0`, `INICIO < FIN`) a través de scripts de evolución (`004_add_check_constraints.sql`).
+- Añadido script de evolución (`005_seed_reservation_test.sql`) que inserta una reservación inicial activa en un periodo futuro sobre el vehículo `V_BICI_001` para posibilitar la prueba y demostración determinista de rechazo por traslape (RN02).
 
 ---
 

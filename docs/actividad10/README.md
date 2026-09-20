@@ -28,10 +28,11 @@ Copia el archivo `.env.example` a `.env` tanto en `backend/` como en `frontend/`
 
 ### 2. Base de Datos (IBM Db2)
 Ejecuta los scripts ubicados en `db/scripts/` en tu servidor Db2 en el orden correspondiente:
-1. `001_create_schema.sql`
-2. `002_seed_data.sql`
-3. `003_add_tarifa_hora.sql`
-4. `004_add_check_constraints.sql`
+1. `001_create_tables.sql`: Creación de tablas de tipos de vehículo, políticas, vehículos y reservaciones.
+2. `002_constraints.sql`: Definición de Primary Keys, Foreign Keys y Unique Constraints.
+3. `003_seed_data.sql`: Datos semilla base (tipos de vehículos, políticas y vehículos iniciales).
+4. `004_add_check_constraints.sql`: Evolución del modelo que incorpora restricciones de dominio `CHECK` (`TARIFA_HORA >= 0`, `TIEMPO_MAX_MIN > 0`, `INICIO < FIN`).
+5. `005_seed_reservation_test.sql`: Evolución del modelo que inserta una reservación inicial activa para el vehículo `V_BICI_001` (`BIC-001`) en un periodo futuro (`2026-10-01 10:00:00` a `2026-10-01 12:00:00`), diseñada específicamente para probar y demostrar el rechazo por traslape (RN02).
 
 ---
 
@@ -64,5 +65,8 @@ npm run dev
 ---
 
 ## Pruebas de Negocio
-1. **Escenario Exitoso:** Inicia sesión con Supabase Auth, selecciona un vehículo disponible, ingresa un rango de tiempo válido dentro de la política de uso y confirma. Se generará la reservación en Db2 con código de confirmación.
-2. **Escenario Rechazado (RN02 - Traslape):** Intenta reservar el mismo vehículo en un intervalo que se superponga con una reservación activa existente. La transacción con aislamiento Serializable/RR en Db2 detectará el conflicto y responderá con código HTTP 409 (Conflicto / Traslape).
+1. **Escenario Exitoso:** Inicia sesión con Supabase Auth, selecciona un vehículo disponible (por ejemplo, `V_BICI_002` o `V_SCOOTER_001`), ingresa un rango de tiempo válido dentro de la política de uso y confirma. Se generará la reservación en Db2 con código de confirmación.
+2. **Escenario Rechazado (RN02 - Traslape con Reservación Semilla):** 
+   - Gracias al script `005_seed_reservation_test.sql`, el vehículo `V_BICI_001` cuenta con una reservación `ACTIVA` para el `2026-10-01` de `10:00` a `12:00`.
+   - Intenta reservar `V_BICI_001` para un horario que se traslape (por ejemplo, `2026-10-01 11:00:00` a `2026-10-01 13:00:00`).
+   - La transacción con nivel de aislamiento Serializable/RR en Db2 detectará la superposición y rechazará la solicitud devolviendo código `HTTP 409` (Conflicto / Traslape).
