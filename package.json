@@ -1,0 +1,12 @@
+{
+  "name": "uv-move-act10-poc",
+  "private": true,
+  "description": "Prueba de concepto de dos módulos UV-Move",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "frontend": "npm --prefix frontend run dev",
+    "backend": "npm --prefix backend run dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "build:backend": "npm --prefix backend run build"
+  }
+}
