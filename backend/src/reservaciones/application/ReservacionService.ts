@@ -23,26 +23,15 @@ export class ReservacionService {
             throw new Error("La fecha de inicio debe ser anterior a la fecha de fin.");
         }
 
-        // RN01 y RN02: Consultar disponibilidad
-        const disponible = await this.vehiculoService.consultarDisponibilidad(vehiculoId, inicio, fin);
-        if (!disponible) {
-            // Utilizamos el código de error HTTP en la capa de controlador (409)
-            const error: any = new Error("El vehículo no está disponible para el periodo seleccionado.");
-            error.status = 409;
+        // RN03 y RN04: Obtener política aplicable del vehículo usando el contrato
+        const vehiculoInfo = await this.vehiculoService.obtenerVehiculo(vehiculoId);
+        if (!vehiculoInfo) {
+            const error: any = new Error("Vehículo no encontrado");
+            error.status = 404;
             throw error;
         }
 
-        // RN03 y RN04: Obtener política aplicable del vehículo
-        // Primero obtenemos el tipo del vehículo (requiere un método adicional o query directa)
-        // Como no está en el puerto originalmente, podemos obtener el tipo de vehículo aquí mediante Db2 o extender el puerto
-        // Dado que el contrato dice: obtenerPoliticaAplicable(tipoVehiculoId), necesitamos el tipoVehiculoId
-        
-        const queryTipo = `SELECT ID_TIPO FROM VEHICULO WHERE ID_VEHICULO = ?`;
-        const resTipo = await Db2Connection.executeQuery(queryTipo, [vehiculoId]);
-        if (resTipo.length === 0) throw new Error("Vehículo no encontrado");
-        
-        const tipoVehiculoId = resTipo[0].ID_TIPO;
-
+        const tipoVehiculoId = vehiculoInfo.TIPOID;
         const politica = await this.vehiculoService.obtenerPoliticaAplicable(tipoVehiculoId);
 
         // Validar RN03: Tiempo máximo
@@ -57,40 +46,64 @@ export class ReservacionService {
         const horas = duracionMinutos / 60;
         const totalEstimado = horas * politica.tarifaHora;
 
-        // Persistir en IBM Db2
         const idReservacion = uuidv4();
         const codigoReserva = `RES-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
-        const insertQuery = `
-            INSERT INTO RESERVACION 
-            (ID_RESERVACION, CODIGO_RESERVA, ID_VEHICULO, ID_USUARIO, INICIO, FIN, ESTADO, TOTAL_ESTIMADO)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `;
-        
         // Formatear fechas para Db2 TIMESTAMP: 'YYYY-MM-DD HH:MM:SS'
         const formatDb2Date = (d: Date) => d.toISOString().replace('T', ' ').substring(0, 19);
 
-        const params = [
-            idReservacion,
-            codigoReserva,
-            vehiculoId,
-            usuarioId,
-            formatDb2Date(inicio),
-            formatDb2Date(fin),
-            EstadoReservacion.ACTIVA,
-            totalEstimado
-        ];
+        // Transacción para garantizar RN02 (evitar traslapes bajo concurrencia)
+        await Db2Connection.executeTransactionWithLogic(async (conn: any) => {
+            // Verificar disponibilidad (estado del vehículo)
+            const queryVehiculo = `SELECT ESTADO FROM VEHICULO WHERE ID_VEHICULO = ?`;
+            const resVehiculo = await new Promise<any[]>((resolve, reject) => {
+                conn.query(queryVehiculo, [vehiculoId], (err: any, data: any) => err ? reject(err) : resolve(data));
+            });
+            if (resVehiculo.length === 0 || resVehiculo[0].ESTADO !== 'DISPONIBLE') {
+                const error: any = new Error("El vehículo no está disponible.");
+                error.status = 409;
+                throw error;
+            }
 
-        // Lo ideal es una transacción si se actualiza el estado, pero como la reserva se hace a futuro, el estado del vehículo 
-        // podría no cambiar a 'EN_USO' inmediatamente, sino cuando inicie la reserva.
-        // Si queremos bloquearlo, usamos cambiarEstado. Para la PoC, asumimos que crear la reserva está bien.
-        // Como la consigna dice: "Se actualiza estado del vehículo si corresponde"
-        // Cambiaremos el estado a 'EN_USO' si el inicio es ahora, pero mantendremos la simplicidad ejecutando el insert.
+            // Verificar traslapes activos
+            const queryTraslapes = `
+                SELECT COUNT(*) AS CANTIDAD
+                FROM RESERVACION
+                WHERE ID_VEHICULO = ?
+                AND ESTADO = 'ACTIVA'
+                AND (INICIO < ? AND FIN > ?)
+            `;
+            const resTraslapes = await new Promise<any[]>((resolve, reject) => {
+                conn.query(queryTraslapes, [vehiculoId, formatDb2Date(fin), formatDb2Date(inicio)], (err: any, data: any) => err ? reject(err) : resolve(data));
+            });
+            
+            if (parseInt(resTraslapes[0].CANTIDAD, 10) > 0) {
+                const error: any = new Error("El vehículo no está disponible para el periodo seleccionado (traslape).");
+                error.status = 409;
+                throw error;
+            }
 
-        await Db2Connection.executeQuery(insertQuery, params);
-
-        // RN01 extra: Cambiar estado a EN_USO si la reserva inicia casi de inmediato (ej: tolerancia de 5 min)
-        // Para simplificar, simplemente lo dejamos en DISPONIBLE porque la RN02 (traslapes) ya nos protege.
+            // Insertar reservación
+            const insertQuery = `
+                INSERT INTO RESERVACION 
+                (ID_RESERVACION, CODIGO_RESERVA, ID_VEHICULO, ID_USUARIO, INICIO, FIN, ESTADO, TOTAL_ESTIMADO)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `;
+            const params = [
+                idReservacion,
+                codigoReserva,
+                vehiculoId,
+                usuarioId,
+                formatDb2Date(inicio),
+                formatDb2Date(fin),
+                EstadoReservacion.ACTIVA,
+                totalEstimado
+            ];
+            
+            await new Promise<void>((resolve, reject) => {
+                conn.query(insertQuery, params, (err: any) => err ? reject(err) : resolve());
+            });
+        });
         
         return {
             id: idReservacion,

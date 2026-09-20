@@ -71,4 +71,48 @@ export class Db2Connection {
             });
         });
     }
+
+    static async executeTransactionWithLogic<T>(callback: (conn: any) => Promise<T>): Promise<T> {
+        return new Promise((resolve, reject) => {
+            ibmdb.open(this.connectionString, (err: any, conn: any) => {
+                if (err) return reject(err);
+                
+                // For SERIALIZABLE isolation level in Db2 we can set it via query
+                conn.query("SET CURRENT ISOLATION TO RR", (isoErr: any) => {
+                    if (isoErr) {
+                        conn.closeSync();
+                        return reject(isoErr);
+                    }
+
+                    conn.beginTransaction(async (err: any) => {
+                        if (err) {
+                            conn.closeSync();
+                            return reject(err);
+                        }
+
+                        try {
+                            const result = await callback(conn);
+                            
+                            conn.commitTransaction((err: any) => {
+                                if (err) {
+                                    conn.rollbackTransaction(() => {
+                                        conn.closeSync();
+                                        reject(err);
+                                    });
+                                } else {
+                                    conn.closeSync();
+                                    resolve(result);
+                                }
+                            });
+                        } catch (callbackErr) {
+                            conn.rollbackTransaction(() => {
+                                conn.closeSync();
+                                reject(callbackErr);
+                            });
+                        }
+                    });
+                });
+            });
+        });
+    }
 }
