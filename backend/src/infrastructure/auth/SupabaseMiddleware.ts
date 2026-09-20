@@ -6,10 +6,10 @@ let supabaseClient: SupabaseClient | null = null;
 function getSupabaseClient(): SupabaseClient {
     if (!supabaseClient) {
         const supabaseUrl = process.env.SUPABASE_URL;
-        const supabaseKey = process.env.SUPABASE_ANON_KEY;
+        const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_SECRET_KEY;
 
         if (!supabaseUrl || !supabaseKey) {
-            throw new Error('Variables de entorno SUPABASE_URL y SUPABASE_ANON_KEY son requeridas y no están configuradas.');
+            throw new Error('Variables de entorno SUPABASE_URL y SUPABASE_ANON_KEY (o SUPABASE_PUBLISHABLE_KEY) son requeridas y no están configuradas.');
         }
 
         supabaseClient = createClient(supabaseUrl, supabaseKey);
