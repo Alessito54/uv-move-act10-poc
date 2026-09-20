@@ -31,7 +31,7 @@ export class ReservacionService {
             throw error;
         }
 
-        const tipoVehiculoId = vehiculoInfo.TIPOID;
+        const tipoVehiculoId = vehiculoInfo.tipoId;
         const politica = await this.vehiculoService.obtenerPoliticaAplicable(tipoVehiculoId);
 
         // Validar RN03: Tiempo máximo

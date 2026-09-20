@@ -1,104 +1,94 @@
 # Documento de Revisión: Implementación Actividad 10
 
 ## 1. ESTADO GENERAL
-- **Implementado**: Backend modular, frontend en React, scripts de base de datos IBM Db2 (incluyendo `004_add_check_constraints.sql`), autenticación de Supabase sin fallbacks.
-- **Compilado**: Sí (`npm run build` ejecutado sin errores tanto en backend como frontend).
-- **Probado**: Parcialmente. Los flujos de autenticación y lógica interna compilan y son estructuralmente correctos.
-- **Pendiente**: Prueba contra Db2 real. No se ha podido probar el flujo localmente debido a la falta de credenciales/instancia de Db2 proporcionada en este entorno (error al conectar con credenciales inválidas).
+- **Implementado**: Backend modular, frontend en React, scripts de base de datos IBM Db2 (incluyendo `004_add_check_constraints.sql`), autenticación de Supabase sin fallbacks ni secretos ficticios, DTO tipado `VehiculoDTO` en el puerto de comunicación entre módulos.
+- **Compilado**: Sí (`npm run build` ejecutado exitosamente sin errores tanto en backend como en frontend).
+- **Probado**: Parcialmente (arquitectura, tipos, interfaces, scripts SQL y compilación validados).
+- **PENDIENTE (MUY IMPORTANTE)**: Las pruebas de extremo a extremo con IBM Db2 real **SIGUEN PENDIENTES** hasta que se ejecuten contra un servidor/contenedor IBM Db2 activo con credenciales reales configuradas. **NO están marcadas como realizadas.**
+
+---
 
 ## 2. ARQUITECTURA
-- **Estructura**: Monolito modular. No hay microservicios.
-- **Flujo**: Frontend Vite React -> Backend Node/Express (Monolito) -> IBM Db2.
+- **Estructura**: Monolito modular. No hay microservicios ni llamadas HTTP entre módulos.
+- **Flujo**: Frontend Vite React -> Backend Node/Express (Monolito) -> IBM Db2 (Única base de datos de negocio).
+
+---
 
 ## 3. MÓDULO VEHÍCULOS
 - Implementa `VehiculoServicePort`.
 - Consultas a Db2 centralizadas.
-- Expone información general de los vehículos sin que el módulo de reservaciones consulte directamente la tabla `VEHICULO`.
+- Expone información tipada de los vehículos (`VehiculoDTO`) sin que el módulo de reservaciones consulte directamente la tabla `VEHICULO`.
+
+---
 
 ## 4. MÓDULO RESERVACIONES
-- Inyecta y utiliza `VehiculoServicePort` para consultar disponibilidad, información y política del vehículo.
+- Inyecta y utiliza `VehiculoServicePort` para consultar disponibilidad, información (`VehiculoDTO`) y política del vehículo.
 - Coordina la transacción para evitar traslapes al momento de crear reservas.
 
+---
+
 ## 5. CONTRATO
-- `VehiculoServicePort` ahora cuenta con la función `obtenerVehiculo(vehiculoId)` garantizando separación de responsabilidades y evitando que Reservaciones haga consultas a tablas de Vehículos.
+- `VehiculoServicePort` define `obtenerVehiculo(vehiculoId): Promise<VehiculoDTO | null>`, eliminando `Promise<any>`.
+- Garantiza la separación estricta de responsabilidades entre módulos respetando el contrato de la Actividad 9.
+
+---
 
 ## 6. IBM DB2
 - Única base de datos para la lógica de negocio.
-- Transacciones soportadas vía callback custom `executeTransactionWithLogic`.
-- Añadidos CHECK constraints (`TARIFA_HORA >= 0`, `TIEMPO_MAX_MIN > 0`, `INICIO < FIN`) a través de scripts de evolución (004).
+- Transacciones soportadas vía callback custom `executeTransactionWithLogic` con nivel de aislamiento RR (`SET CURRENT ISOLATION TO RR`).
+- Se eliminó completamente cualquier cadena de conexión fallback ("testdb/password"). Si `DB2_CONNECTION_STRING` no está definida, lanza un error claro.
+- Añadidos CHECK constraints (`TARIFA_HORA >= 0`, `TIEMPO_MAX_MIN > 0`, `INICIO < FIN`) a través de scripts de evolución (`004_add_check_constraints.sql`).
+
+---
 
 ## 7. SUPABASE AUTH
-- Middleware valida JWT.
-- Se ha eliminado el fallback `TEST_USER_ID`. Si no hay token, retorna 401.
+- Middleware valida JWT sin fallbacks (`authMiddleware`).
+- Se eliminaron por completo URLs o llaves ficticias (`example.supabase.co`, `example_key`).
+- Carga de `dotenv/config` garantizada antes de inicializar clientes de autenticación.
+- Si no se provee token o si faltan las variables de entorno de Supabase, se rechaza la petición apropiadamente.
 
-## 8. RN01
-- Se obtiene la disponibilidad del vehículo mediante `VehiculoServicePort`. Si no es "DISPONIBLE", retorna 409 dentro de la transacción de reserva.
+---
 
-## 9. RN02 (Traslapes)
-- Las validaciones de traslape y la inserción se realizan de manera contigua dentro de una **transacción** (`executeTransactionWithLogic`).
-- Db2 usa aislamiento/RR (`SERIALIZABLE`) a través de un `SET CURRENT ISOLATION TO RR` antes del bloque, protegiendo ante concurrencia y validando superposición en el mismo commit.
+## 8. REGLAS DE NEGOCIO (RN)
+- **RN01 (Disponibilidad):** Se obtiene la disponibilidad del vehículo mediante `VehiculoServicePort`. Si no está en estado "DISPONIBLE", retorna HTTP 409 dentro de la transacción de reserva.
+- **RN02 (Traslapes):** Las validaciones de traslape y la inserción se realizan de manera contigua dentro de una transacción en Db2 con aislamiento Serializable/RR (`executeTransactionWithLogic`).
+- **RN03 (Políticas):** Tarifa por hora y tiempo máximo configurables en Db2 (`POLITICA_VEHICULO`), consultadas dinámicamente vía el puerto.
+- **RN04 (Agnóstico de tipos):** Lógica desacoplada de nombres de tipo; no existen condicionales específicos de tipo de vehículo en el código.
 
-## 10. RN03 (Políticas)
-- La tarifa y el tiempo máximo por cada tipo de vehículo se verifican consultando Db2 (`POLITICA_VEHICULO`) usando la interfaz correspondiente.
+---
 
-## 11. RN04 (Agnóstico de tipos)
-- La lógica en `ReservacionService` se basa únicamente en la política extraída de los datos. No existen sentencias `if(tipo === 'bicicleta')`.
+## 9. MATRIZ DE ESTADO DE ESCENARIOS
 
-## 12. ESCENARIO EXITOSO
-- [x] Implementado
-- [x] Compilado
-- [ ] Probado con Db2 real (El código es seguro, pero no hay entorno Db2 para corroborar).
+| Escenario | Implementación | Compilación | Prueba con Db2 Real |
+|---|---|---|---|
+| Escenario Exitoso (Reserva Válida) | ✅ Completado | ✅ Verificado (`tsc`) | ⏳ **PENDIENTE** (Requiere conexión a instancia Db2 activa con credenciales) |
+| Escenario Rechazado (RN02 - Traslape) | ✅ Completado | ✅ Verificado (`tsc`) | ⏳ **PENDIENTE** (Requiere conexión a instancia Db2 activa con credenciales) |
+| Validación de Políticas (RN03 / RN04) | ✅ Completado | ✅ Verificado (`tsc`) | ⏳ **PENDIENTE** (Requiere conexión a instancia Db2 activa con credenciales) |
 
-## 13. ESCENARIO RECHAZADO (RN02 - Traslape)
-- [x] Implementado (Levantará un error HTTP 409 dentro de la transacción).
-- [x] Compilado
-- [ ] Probado con Db2 real (Imposible sin BD local).
+---
 
-## 14. PRUEBAS
-- Debido a la falta de credenciales de la instancia de Db2 proporcionada localmente (arroja SQL30082N USERNAME AND/OR PASSWORD INVALID), las validaciones a DB fallan en la conexión. Solo se compilaron ambos proyectos y se validó el código.
+## 10. TRAZABILIDAD
 
-## 15. PROBLEMAS ENCONTRADOS
-- La conexión predeterminada a DB2 requiere la contraseña y no se provee.
-- Las promesas por defecto de `ibm_db` limitan ejecutar lógica compleja en medio de la transacción nativa del paquete, se requirió crear un wrapper (`executeTransactionWithLogic`).
-
-## 16. DECISIONES TÉCNICAS
-- Se implementó un Wrapper de Transacción en `Db2Connection` que permite ejecutar sentencias consecutivas comprobando `throw/catch` antes de hacer el `commitTransaction`.
-- Se configuró el nivel de aislamiento `RR` usando un `query` inicial a la sesión de Db2 antes de empezar el `beginTransaction`.
-
-## 17. CAMBIOS RESPECTO A LA ACTIVIDAD 9
-- Consolidación del contrato (se eliminaron selectivos de Vehículo en Reservaciones).
-- `ReservacionService` ahora efectúa transacciones lógicas y seguras ante concurrencia.
-- Archivos `.gitignore` configurados, código depurado de repositorios remotos.
-- Seguridad en Autenticación strictamente adherida a Supabase JWT.
-
-## 18. TRAZABILIDAD
-
-| Requisito/Regla | Módulo | Caso de uso | Archivo/clase | Db2 | Evidencia |
+| Requisito/Regla | Módulo | Caso de uso | Archivo / Clase | Persistencia | Detalle Técnico |
 |---|---|---|---|---|---|
-| RN01 (Disp) | Reservaciones/Vehículos | Crear Reserva | `ReservacionService.ts` / `VehiculoService.ts` | Si | Valida estado 'DISPONIBLE' en TX |
-| RN02 (Traslape)| Reservaciones | Crear Reserva | `ReservacionService.ts` | Si | Transacción `executeTransactionWithLogic`, aislamiento RR y verificación COUNT de traslapes en tabla `RESERVACION`. Retorna HTTP 409 |
-| RN03 (Políticas)| Reservaciones | Crear Reserva | `VehiculoServicePort.ts` | Si | Consulta a tabla `POLITICA_VEHICULO` obteniendo tarifas |
-| RN04 (Abierto) | Reservaciones | Crear Reserva | `ReservacionService.ts` | Si | `obtenerPoliticaAplicable` devuelve dinámicamente las restricciones sin ifs |
-| Monolito Modular| Arquitectura | Todo | `VehiculoServicePort.ts` | No | No hay red, se inyecta la instancia y se consulta como puerto |
+| RN01 (Disponibilidad) | Reservaciones / Vehículos | Crear Reserva | `ReservacionService.ts` / `VehiculoService.ts` | Db2 | Valida estado `DISPONIBLE` dentro de la transacción |
+| RN02 (Traslape) | Reservaciones | Crear Reserva | `ReservacionService.ts` | Db2 | Transacción `executeTransactionWithLogic` con `SET CURRENT ISOLATION TO RR` y verificación `COUNT` de traslapes en tabla `RESERVACION`. Retorna HTTP 409 |
+| RN03 (Políticas) | Reservaciones | Crear Reserva | `VehiculoServicePort.ts` | Db2 | Consulta dinámica a tabla `POLITICA_VEHICULO` |
+| RN04 (Agnóstico) | Reservaciones | Crear Reserva | `ReservacionService.ts` | Db2 | `obtenerPoliticaAplicable` devuelve dinámicamente las restricciones sin ifs de negocio |
+| Monolito Modular | Arquitectura | Todo | `VehiculoServicePort.ts` | N/A | Inyección de dependencias en memoria, sin HTTP interno |
+| Tipado de Contrato | Shared Ports | Colaboración | `VehiculoDTO.ts` | N/A | `obtenerVehiculo` retorna `Promise<VehiculoDTO \| null>` |
 
-## 19. INSTRUCCIONES DE EJECUCIÓN
+---
 
-1. Base de Datos (Db2 vía Docker):
-Asegurar que la instancia `db2inst1` en `localhost:50000` con DB `UVMOVE` está corriendo. Exportar la variable de entorno de conexión.
-`export DB2_CONNECTION_STRING="DATABASE=UVMOVE;HOSTNAME=localhost;UID=db2inst1;PWD=YOUR_PASS;PORT=50000;PROTOCOL=TCPIP"`
+## 11. INSTRUCCIONES DE CONFIGURACIÓN Y EJECUCIÓN
 
-2. Backend:
-```bash
-cd backend
-npm install
-npm run dev
-# (o npm run build && npm start)
-```
+1. **Variables de entorno:**
+   - Crear `backend/.env` a partir de `backend/.env.example` con `DB2_CONNECTION_STRING`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`.
+   - Crear `frontend/.env` a partir de `frontend/.env.example` con `VITE_API_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 
-3. Frontend:
-```bash
-cd frontend
-npm install
-npm run build
-npm run dev
-```
+2. **Base de Datos (IBM Db2):**
+   - Ejecutar los scripts `db/scripts/001_create_schema.sql` a `004_add_check_constraints.sql`.
+
+3. **Ejecución:**
+   - Terminal 1: `npm run dev` (Frontend en `http://localhost:5173`)
+   - Terminal 2: `npm run backend` (Backend en `http://localhost:3000`)

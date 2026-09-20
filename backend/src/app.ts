@@ -1,11 +1,8 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import vehiculoRoutes from './http/routes/vehiculoRoutes';
 import reservacionRoutes from './http/routes/reservacionRoutes';
-
-// Cargar variables de entorno
-dotenv.config();
 
 const app = express();
 

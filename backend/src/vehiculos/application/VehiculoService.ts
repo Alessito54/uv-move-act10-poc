@@ -2,6 +2,7 @@ import { Db2Connection } from "../../infrastructure/db2/Db2Connection";
 import { VehiculoServicePort } from "../../shared/ports/VehiculoServicePort";
 import { EstadoVehiculo } from "../domain/Vehiculo";
 import { PoliticaVehiculoDTO } from "../domain/PoliticaVehiculoDTO";
+import { VehiculoDTO } from "../domain/VehiculoDTO";
 
 export class VehiculoService implements VehiculoServicePort {
     async consultarDisponibilidad(vehiculoId: string, inicio: Date, fin: Date): Promise<boolean> {
@@ -65,7 +66,7 @@ export class VehiculoService implements VehiculoServicePort {
         return Db2Connection.executeQuery(query);
     }
     
-    async obtenerVehiculo(vehiculoId: string): Promise<any> {
+    async obtenerVehiculo(vehiculoId: string): Promise<VehiculoDTO | null> {
         const query = `
             SELECT v.ID_VEHICULO as id, v.CODIGO as codigo, v.ESTADO as estado, 
                    t.ID_TIPO as tipoId, t.NOMBRE as tipoNombre, t.DESCRIPCION as tipoDescripcion
@@ -75,6 +76,14 @@ export class VehiculoService implements VehiculoServicePort {
         `;
         const res = await Db2Connection.executeQuery(query, [vehiculoId]);
         if (res.length === 0) return null;
-        return res[0];
+        const row = res[0];
+        return {
+            id: row.id || row.ID || row.ID_VEHICULO,
+            codigo: row.codigo || row.CODIGO,
+            estado: (row.estado || row.ESTADO) as EstadoVehiculo,
+            tipoId: row.tipoId || row.TIPOID || row.ID_TIPO,
+            tipoNombre: row.tipoNombre || row.TIPONOMBRE || row.NOMBRE,
+            tipoDescripcion: row.tipoDescripcion || row.TIPODESCRIPCION || row.DESCRIPCION
+        };
     }
 }

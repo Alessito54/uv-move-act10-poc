@@ -1,11 +1,26 @@
 const ibmdb = require('ibm_db');
 
 export class Db2Connection {
-    private static connectionString = process.env.DB2_CONNECTION_STRING || "DATABASE=testdb;HOSTNAME=localhost;UID=db2inst1;PWD=password;PORT=50000;PROTOCOL=TCPIP";
+    private static getConnectionString(): string {
+        const connStr = process.env.DB2_CONNECTION_STRING;
+        if (!connStr || connStr.trim() === '') {
+            throw new Error(
+                "Variable de entorno DB2_CONNECTION_STRING no configurada. Es requerida para conectar con IBM Db2."
+            );
+        }
+        return connStr;
+    }
 
     static async executeQuery(query: string, params: any[] = []): Promise<any[]> {
         return new Promise((resolve, reject) => {
-            ibmdb.open(this.connectionString, (err: any, conn: any) => {
+            let connStr: string;
+            try {
+                connStr = this.getConnectionString();
+            } catch (err) {
+                return reject(err);
+            }
+
+            ibmdb.open(connStr, (err: any, conn: any) => {
                 if (err) {
                     return reject(err);
                 }
@@ -30,7 +45,14 @@ export class Db2Connection {
 
     static async executeTransaction(queries: { query: string, params: any[] }[]): Promise<void> {
         return new Promise((resolve, reject) => {
-            ibmdb.open(this.connectionString, (err: any, conn: any) => {
+            let connStr: string;
+            try {
+                connStr = this.getConnectionString();
+            } catch (err) {
+                return reject(err);
+            }
+
+            ibmdb.open(connStr, (err: any, conn: any) => {
                 if (err) return reject(err);
                 
                 conn.beginTransaction((err: any) => {
@@ -74,7 +96,14 @@ export class Db2Connection {
 
     static async executeTransactionWithLogic<T>(callback: (conn: any) => Promise<T>): Promise<T> {
         return new Promise((resolve, reject) => {
-            ibmdb.open(this.connectionString, (err: any, conn: any) => {
+            let connStr: string;
+            try {
+                connStr = this.getConnectionString();
+            } catch (err) {
+                return reject(err);
+            }
+
+            ibmdb.open(connStr, (err: any, conn: any) => {
                 if (err) return reject(err);
                 
                 // For SERIALIZABLE isolation level in Db2 we can set it via query

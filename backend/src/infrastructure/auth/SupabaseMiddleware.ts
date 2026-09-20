@@ -1,10 +1,21 @@
 import { Request, Response, NextFunction } from 'express';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Reemplazar con variables de entorno en producción
-const supabaseUrl = process.env.SUPABASE_URL || 'https://example.supabase.co';
-const supabaseKey = process.env.SUPABASE_ANON_KEY || 'example_key';
-const supabase = createClient(supabaseUrl, supabaseKey);
+let supabaseClient: SupabaseClient | null = null;
+
+function getSupabaseClient(): SupabaseClient {
+    if (!supabaseClient) {
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+        if (!supabaseUrl || !supabaseKey) {
+            throw new Error('Variables de entorno SUPABASE_URL y SUPABASE_ANON_KEY son requeridas y no están configuradas.');
+        }
+
+        supabaseClient = createClient(supabaseUrl, supabaseKey);
+    }
+    return supabaseClient;
+}
 
 export const authMiddleware = async (req: Request, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;
@@ -16,6 +27,7 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
     const token = authHeader.split(' ')[1];
 
     try {
+        const supabase = getSupabaseClient();
         const { data, error } = await supabase.auth.getUser(token);
         
         if (error || !data.user) {
@@ -25,7 +37,8 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
         // Inyectar el usuario en la request para uso posterior
         (req as any).user = data.user;
         next();
-    } catch (err) {
+    } catch (err: any) {
+        console.error('Error en authMiddleware:', err?.message || err);
         return res.status(500).json({ error: 'Error interno en la autenticación.' });
     }
 };

@@ -1,5 +1,6 @@
 import { EstadoVehiculo } from "../../vehiculos/domain/Vehiculo";
 import { PoliticaVehiculoDTO } from "../../vehiculos/domain/PoliticaVehiculoDTO";
+import { VehiculoDTO } from "../../vehiculos/domain/VehiculoDTO";
 
 export interface VehiculoServicePort {
     consultarDisponibilidad(
@@ -14,7 +15,7 @@ export interface VehiculoServicePort {
 
     obtenerVehiculo(
         vehiculoId: string
-    ): Promise<any>;
+    ): Promise<VehiculoDTO | null>;
 
     cambiarEstado(
         vehiculoId: string,

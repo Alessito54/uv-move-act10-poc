@@ -27,7 +27,7 @@ export class VehiculoController {
             }
             
             // Adjuntamos la política para que el frontend pueda mostrarla sin hacer otro llamado (optimización permitida)
-            const politica = await this.vehiculoService.obtenerPoliticaAplicable(vehiculo.TIPOID);
+            const politica = await this.vehiculoService.obtenerPoliticaAplicable(vehiculo.tipoId);
             
             return res.status(200).json({ vehiculo, politica });
         } catch (error: any) {
