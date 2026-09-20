@@ -13,8 +13,12 @@ export class ReservacionController {
     crearReservacion = async (req: Request, res: Response) => {
         try {
             const { vehiculoId, inicio, fin } = req.body;
-            const usuarioId = (req as any).user?.id || 'TEST_USER_ID'; // Fallback for local testing if auth is mocked
+            const usuarioId = (req as any).user?.id;
             
+            if (!usuarioId) {
+                return res.status(401).json({ error: 'No autorizado. Se requiere un usuario autenticado.' });
+            }
+
             if (!vehiculoId || !inicio || !fin) {
                 return res.status(400).json({ error: 'Faltan datos obligatorios (vehiculoId, inicio, fin)' });
             }
