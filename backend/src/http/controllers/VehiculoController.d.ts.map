@@ -1,0 +1,1 @@
+{"version":3,"file":"VehiculoController.d.ts","sourceRoot":"","sources":["VehiculoController.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,OAAO,EAAE,QAAQ,EAAE,MAAM,SAAS,CAAC;AAG5C,qBAAa,kBAAkB;IAC3B,OAAO,CAAC,eAAe,CAAkB;IAEzC,cAEC;IAED,eAAe,QAAe,OAAO,OAAO,QAAQ,iDAQlD;IAEF,eAAe,QAAe,OAAO,OAAO,QAAQ,iDAgBlD;CACL"}
