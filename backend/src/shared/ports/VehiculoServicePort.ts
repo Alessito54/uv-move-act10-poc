@@ -12,6 +12,10 @@ export interface VehiculoServicePort {
         tipoVehiculoId: string
     ): Promise<PoliticaVehiculoDTO>;
 
+    obtenerVehiculo(
+        vehiculoId: string
+    ): Promise<any>;
+
     cambiarEstado(
         vehiculoId: string,
         nuevoEstado: EstadoVehiculo

@@ -21,7 +21,7 @@ export class VehiculoController {
     obtenerVehiculo = async (req: Request, res: Response) => {
         try {
             const id = req.params.id as string;
-            const vehiculo = await this.vehiculoService.obtenerVehiculoPorId(id);
+            const vehiculo = await this.vehiculoService.obtenerVehiculo(id);
             if (!vehiculo) {
                 return res.status(404).json({ error: 'Vehículo no encontrado' });
             }

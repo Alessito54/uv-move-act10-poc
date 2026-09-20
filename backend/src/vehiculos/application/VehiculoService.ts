@@ -65,7 +65,7 @@ export class VehiculoService implements VehiculoServicePort {
         return Db2Connection.executeQuery(query);
     }
     
-    async obtenerVehiculoPorId(vehiculoId: string): Promise<any> {
+    async obtenerVehiculo(vehiculoId: string): Promise<any> {
         const query = `
             SELECT v.ID_VEHICULO as id, v.CODIGO as codigo, v.ESTADO as estado, 
                    t.ID_TIPO as tipoId, t.NOMBRE as tipoNombre, t.DESCRIPCION as tipoDescripcion
